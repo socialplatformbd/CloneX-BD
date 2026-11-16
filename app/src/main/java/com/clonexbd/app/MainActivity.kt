@@ -74,6 +74,7 @@ private fun CloneXApp(
     val bn = language == "bn"
     var tab by remember { mutableIntStateOf(0) }
     var showInfo by remember { mutableStateOf(false) }
+    var selectedApps by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val titles = if (bn) listOf("হোম", "অ্যাপস", "ক্লোন", "সেটিংস") else listOf("Home", "Apps", "Clones", "Settings")
     Scaffold(
         bottomBar = {
@@ -87,8 +88,17 @@ private fun CloneXApp(
     ) { padding ->
         when (tab) {
             0 -> HomeScreen(bn, Modifier.padding(padding), onGoApps = { tab = 1 }, onInfo = { showInfo = true })
-            1 -> AppsScreen(bn, Modifier.padding(padding))
-            2 -> CloneScreen(bn, Modifier.padding(padding))
+            1 -> AppsScreen(
+                bn, Modifier.padding(padding), selectedApps.keys,
+                onSelectionChange = { pkg, label, checked ->
+                    selectedApps = if (checked) selectedApps + (pkg to label)
+                    else selectedApps - pkg
+                }
+            )
+            2 -> CloneScreen(
+                bn, Modifier.padding(padding), selectedApps,
+                onRemove = { pkg -> selectedApps = selectedApps - pkg }
+            )
             else -> SettingsScreen(bn, dark, onDarkChange, onLanguageChange, Modifier.padding(padding), onInfo = { showInfo = true })
         }
     }
@@ -158,51 +168,133 @@ private fun StatCard(title: String, value: String, modifier: Modifier) {
     }
 }
 
+
 @Composable
-private fun AppsScreen(bn: Boolean, modifier: Modifier) {
+private fun AppsScreen(
+    bn: Boolean,
+    modifier: Modifier,
+    selectedPackages: Set<String>,
+    onSelectionChange: (String, String, Boolean) -> Unit
+) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var apps by remember { mutableStateOf(emptyList<AppEntry>()) }
     var loading by remember { mutableStateOf(true) }
+
     LaunchedEffect(Unit) {
         apps = runCatching {
             val pm = context.packageManager
-            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val intent = Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+
             @Suppress("DEPRECATION")
             pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
                 .mapNotNull { info ->
                     val pkg = info.activityInfo.packageName
                     if (pkg == context.packageName) null
-                    else AppEntry(info.loadLabel(pm).toString(), pkg, info.loadIcon(pm))
-                }.distinctBy { it.packageName }.sortedBy { it.label.lowercase(Locale.getDefault()) }
+                    else AppEntry(
+                        info.loadLabel(pm).toString(),
+                        pkg,
+                        info.loadIcon(pm)
+                    )
+                }
+                .distinctBy { it.packageName }
+                .sortedBy { it.label.lowercase(Locale.getDefault()) }
         }.getOrDefault(emptyList())
+
         loading = false
     }
-    val filtered = apps.filter { it.label.contains(query, true) || it.packageName.contains(query, true) }
+
+    val filtered = apps.filter {
+        it.label.contains(query, true) ||
+            it.packageName.contains(query, true)
+    }
+
     Page(modifier) {
-        Text(if (bn) "ইনস্টল করা অ্যাপ" else "Installed Apps", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            if (bn) "ইনস্টল করা অ্যাপ" else "Installed Apps",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            if (bn) "নির্বাচিত: ${selectedPackages.size} টি"
+            else "Selected: ${selectedPackages.size}",
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold
+        )
+
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(),
+
+        OutlinedTextField(
+            query,
+            { query = it },
+            modifier = Modifier.fillMaxWidth(),
             leadingIcon = { Icon(Icons.Default.Search, null) },
-            placeholder = { Text(if (bn) "অ্যাপ খুঁজুন" else "Search apps") },
-            singleLine = true, shape = RoundedCornerShape(16.dp))
+            placeholder = {
+                Text(if (bn) "অ্যাপ খুঁজুন" else "Search apps")
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(16.dp)
+        )
+
         Spacer(Modifier.height(10.dp))
+
         when {
-            loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            filtered.isEmpty() -> Text(if (bn) "কোনো অ্যাপ পাওয়া যায়নি" else "No apps found")
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            loading -> Box(
+                Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+
+            filtered.isEmpty() -> Text(
+                if (bn) "কোনো অ্যাপ পাওয়া যায়নি" else "No apps found"
+            )
+
+            else -> LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 items(filtered, key = { it.packageName }) { app ->
+                    val checked = app.packageName in selectedPackages
+
                     Card(shape = RoundedCornerShape(16.dp)) {
-                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Image(app.icon.toBitmap(96, 96).asImageBitmap(), null, Modifier.size(42.dp))
+                        Row(
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                app.icon.toBitmap(96, 96).asImageBitmap(),
+                                null,
+                                Modifier.size(42.dp)
+                            )
+
                             Spacer(Modifier.width(12.dp))
+
                             Column(Modifier.weight(1f)) {
-                                Text(app.label, fontWeight = FontWeight.SemiBold)
-                                Text(app.packageName, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    app.label,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    app.packageName,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                            TextButton(onClick = {
-                                // Deliberately does not pretend to clone: profile provisioning is a separate DPC flow.
-                            }) { Text(if (bn) "তথ্য" else "Details") }
+
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = {
+                                    onSelectionChange(
+                                        app.packageName,
+                                        app.label,
+                                        it
+                                    )
+                                }
+                            )
                         }
                     }
                 }
@@ -212,23 +304,100 @@ private fun AppsScreen(bn: Boolean, modifier: Modifier) {
 }
 
 @Composable
-private fun CloneScreen(bn: Boolean, modifier: Modifier) {
+private fun CloneScreen(
+    bn: Boolean,
+    modifier: Modifier,
+    selectedApps: Map<String, String>,
+    onRemove: (String) -> Unit
+) {
     Page(modifier) {
-        Text(if (bn) "ক্লোন ম্যানেজার" else "Clone Manager", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            if (bn) "ক্লোন ম্যানেজার" else "Clone Manager",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+
         Spacer(Modifier.height(14.dp))
-        Card(shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.padding(18.dp)) {
-                Icon(Icons.Default.Layers, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp), contentDescription = null)
-                Spacer(Modifier.height(8.dp))
-                Text(if (bn) "এখনো কোনো ক্লোন তৈরি হয়নি" else "No clones created yet", fontWeight = FontWeight.Bold)
-                Text(if (bn) "Android Work Profile-এর অনুমোদিত সেটআপ যুক্ত হলে এখানে ক্লোনের অবস্থা দেখা যাবে।" else "Clone status will appear here after the supported Android Work Profile provisioning flow is implemented.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Text(
+            if (bn) "নির্বাচিত অ্যাপ: ${selectedApps.size} টি"
+            else "Selected apps: ${selectedApps.size}",
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        if (selectedApps.isEmpty()) {
+            Card(shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(18.dp)) {
+                    Icon(
+                        Icons.Default.Layers,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(34.dp),
+                        contentDescription = null
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        if (bn) "কোনো অ্যাপ নির্বাচন করা হয়নি"
+                        else "No apps selected",
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        if (bn) "Apps থেকে অ্যাপ নির্বাচন করুন।"
+                        else "Select apps from the Apps tab."
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(selectedApps.toList(), key = { it.first }) { item ->
+                    Card(shape = RoundedCornerShape(16.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    item.second,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    item.first,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            TextButton(onClick = { onRemove(item.first) }) {
+                                Text(if (bn) "বাদ দিন" else "Remove")
+                            }
+                        }
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Text(if (bn) "গুরুত্বপূর্ণ" else "Important", fontWeight = FontWeight.SemiBold)
-        Text(if (bn) "শুধু অ্যাপের তালিকা দেখা মানেই ক্লোন তৈরি নয়। এই সংস্করণে কোনো অ্যাপের ডেটা কপি বা পরিবর্তন করা হয় না।" else "Listing an installed app does not create a clone. This build does not copy or modify other apps' data.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Spacer(Modifier.height(14.dp))
+
+        Text(
+            if (bn) "গুরুত্বপূর্ণ" else "Important",
+            fontWeight = FontWeight.SemiBold
+        )
+
+        Text(
+            if (bn)
+                "এগুলো শুধু নির্বাচিত অ্যাপ। এখনো কোনো ক্লোন তৈরি হয়নি বা অন্য অ্যাপের ডেটা কপি করা হয়নি।"
+            else
+                "These are selected apps only. No clones have been created and no other app data has been copied.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
