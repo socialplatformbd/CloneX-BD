@@ -14,7 +14,7 @@ A phone-first Android project scaffold using Kotlin, Jetpack Compose and GitHub 
 - GitHub Actions workflows for debug APK and signed release APK.
 
 ## Important capability boundary
-This starter does **not** clone other apps or access their private data. Android app cloning requires a supported, separately provisioned Work Profile / Device Policy Controller (DPC) flow and device/OEM compatibility. The next engineering phase must implement and test that flow. Do not market this starter as a functioning app cloner yet.
+CloneX BD Safe Edition provides app discovery, selection, theme and language settings. It does not create independent clones of other apps or access their private data. It works as a regular Android app without Device Admin or Profile Owner privileges.
 
 ## Build locally
 Requires JDK 17, Android SDK Platform 35 and Gradle 8.11.1:

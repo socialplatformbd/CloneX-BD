@@ -1,8 +1,6 @@
 package com.clonexbd.app
 
 import android.content.Intent
-import android.content.Context
-import android.app.admin.DevicePolicyManager
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Bundle
@@ -75,15 +73,7 @@ private fun CloneXApp(
 ) {
     val bn = language == "bn"
     val context = LocalContext.current
-    val dpm = context.getSystemService(
-        Context.DEVICE_POLICY_SERVICE
-    ) as DevicePolicyManager
-
-    val isProfileOwner = runCatching {
-        dpm.isProfileOwnerApp(context.packageName)
-    }.getOrDefault(false)
-
-    var tab by remember { mutableIntStateOf(0) }
+var tab by remember { mutableIntStateOf(0) }
     var showInfo by remember { mutableStateOf(false) }
     var selectedApps by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val titles = if (bn) listOf("হোম", "অ্যাপস", "ক্লোন", "সেটিংস") else listOf("Home", "Apps", "Clones", "Settings")
@@ -113,8 +103,7 @@ private fun CloneXApp(
             else -> SettingsScreen(
                 bn, dark, onDarkChange, onLanguageChange,
                 Modifier.padding(padding),
-                onInfo = { showInfo = true },
-                isProfileOwner = isProfileOwner
+                onInfo = { showInfo = true }
             )
         }
     }
@@ -122,7 +111,7 @@ private fun CloneXApp(
         AlertDialog(onDismissRequest = { showInfo = false },
             confirmButton = { TextButton(onClick = { showInfo = false }) { Text(if (bn) "বন্ধ" else "Close") } },
             title = { Text("CloneX BD") },
-            text = { Text(if (bn) "Made by Mohammad Rakib\nবাংলা ও English\n\nএই প্রাথমিক সংস্করণে অ্যাপ তালিকা, থিম ও ভাষা সেটিংস আছে। প্রকৃত ক্লোন তৈরির জন্য Android Work Profile/DPC সেটআপ পরবর্তী ধাপে যুক্ত হবে।" else "Made by Mohammad Rakib\nBangla & English\n\nThis starter build includes app discovery, theme and language settings. Real work-profile provisioning is a separate next phase.") })
+            text = { Text(if (bn) "Made by Mohammad Rakib\nবাংলা ও English\n\nএই প্রাথমিক সংস্করণে অ্যাপ তালিকা, থিম ও ভাষা সেটিংস আছে। এই সংস্করণ অন্য অ্যাপের ক্লোন তৈরি বা ব্যক্তিগত ডেটা অ্যাক্সেস করে না।" else "Made by Mohammad Rakib\nBangla & English\n\nThis starter build includes app discovery, theme and language settings. This version does not create app clones or access other apps' private data.") })
     }
 }
 
@@ -422,8 +411,7 @@ private fun SettingsScreen(
     bn: Boolean, dark: Boolean, onDarkChange: (Boolean) -> Unit,
     onLanguageChange: (String) -> Unit,
     modifier: Modifier,
-    onInfo: () -> Unit,
-    isProfileOwner: Boolean
+    onInfo: () -> Unit
 ) {
     val context = LocalContext.current
     Page(modifier) {
@@ -438,27 +426,7 @@ private fun SettingsScreen(
         }
         Spacer(Modifier.height(14.dp))
 
-        Card(shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.padding(16.dp)) {
-                Text(
-                    "Work Profile Status",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    if (isProfileOwner) {
-                        if (bn) "CloneX BD এই Work Profile-এর Profile Owner।"
-                        else "CloneX BD is the Profile Owner of this Work Profile."
-                    } else {
-                        if (bn) "CloneX BD Profile Owner নয়। অ্যাপটি Work Profile-এ ইনস্টল আছে, কিন্তু প্রোফাইলের মালিক নয়।"
-                        else "CloneX BD is not the Profile Owner. The app is installed in the Work Profile but does not own it."
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
+
         Text(if (bn) "চেহারা" else "Appearance", fontWeight = FontWeight.SemiBold)
         Row(Modifier.fillMaxWidth().clickable { onDarkChange(!dark) }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.DarkMode, null)
