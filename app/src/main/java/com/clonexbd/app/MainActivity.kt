@@ -1,17 +1,13 @@
 package com.clonexbd.app
 
 import android.content.Intent
-import android.content.ComponentName
 import android.content.Context
 import android.app.admin.DevicePolicyManager
-import android.os.Build
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -79,66 +75,13 @@ private fun CloneXApp(
 ) {
     val bn = language == "bn"
     val context = LocalContext.current
-    var workProfileStatus by remember { mutableStateOf<String?>(null) }
+    val dpm = context.getSystemService(
+        Context.DEVICE_POLICY_SERVICE
+    ) as DevicePolicyManager
 
-    val provisioningLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        workProfileStatus = if (result.resultCode == android.app.Activity.RESULT_OK) {
-            if (bn) "Android সেটআপ সফল জানিয়েছে। Settings-এ Work Profile আছে কি না যাচাই করো।"
-            else "Android reported success. Check Settings to confirm the Work Profile."
-        } else {
-            if (bn) "সেটআপ বাতিল হয়েছে অথবা সম্পন্ন হয়নি।"
-            else "Setup was cancelled or could not be completed."
-        }
-    }
-
-    val startWorkProfileSetup: () -> Unit = {
-        try {
-            val pm = context.packageManager
-            val action = DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE
-
-            if (!pm.hasSystemFeature(PackageManager.FEATURE_MANAGED_USERS)) {
-                workProfileStatus = if (bn) "এই ডিভাইসে Work Profile সমর্থিত নয়।"
-                else "Work Profile is not supported on this device."
-            } else {
-                val dpm = context.getSystemService(
-                    Context.DEVICE_POLICY_SERVICE
-                ) as DevicePolicyManager
-
-                if (
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                    !dpm.isProvisioningAllowed(action)
-                ) {
-                    workProfileStatus = if (bn) "এখন Work Profile সেটআপ অনুমোদিত নয়।"
-                    else "Work Profile setup is not currently allowed."
-                } else {
-                    val admin = ComponentName(
-                        context,
-                        CloneXAdminReceiver::class.java
-                    )
-
-                    val setupIntent = Intent(action).putExtra(
-                        DevicePolicyManager.EXTRA_PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME,
-                        admin
-                    )
-
-                    if (setupIntent.resolveActivity(pm) == null) {
-                        workProfileStatus = if (bn) "Android সেটআপ সার্ভিস পাওয়া যায়নি।"
-                        else "Android provisioning service is unavailable."
-                    } else {
-                        provisioningLauncher.launch(setupIntent)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            workProfileStatus = if (bn) {
-                "সেটআপ শুরু করা যায়নি: ${e.message ?: "অজানা সমস্যা"}"
-            } else {
-                "Could not start setup: ${e.message ?: "Unknown error"}"
-            }
-        }
-    }
+    val isProfileOwner = runCatching {
+        dpm.isProfileOwnerApp(context.packageName)
+    }.getOrDefault(false)
 
     var tab by remember { mutableIntStateOf(0) }
     var showInfo by remember { mutableStateOf(false) }
@@ -171,8 +114,7 @@ private fun CloneXApp(
                 bn, dark, onDarkChange, onLanguageChange,
                 Modifier.padding(padding),
                 onInfo = { showInfo = true },
-                onSetupWorkProfile = startWorkProfileSetup,
-                workProfileStatus = workProfileStatus
+                isProfileOwner = isProfileOwner
             )
         }
     }
@@ -481,8 +423,7 @@ private fun SettingsScreen(
     onLanguageChange: (String) -> Unit,
     modifier: Modifier,
     onInfo: () -> Unit,
-    onSetupWorkProfile: () -> Unit,
-    workProfileStatus: String?
+    isProfileOwner: Boolean
 ) {
     val context = LocalContext.current
     Page(modifier) {
@@ -500,35 +441,23 @@ private fun SettingsScreen(
         Card(shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(16.dp)) {
                 Text(
-                    if (bn) "Work Profile সেটআপ" else "Work Profile Setup",
+                    "Work Profile Status",
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    if (bn)
-                        "Android-এর অনুমোদিত পদ্ধতিতে আলাদা Work Profile তৈরি করার চেষ্টা করবে। পরবর্তী ধাপে Android-এর নির্দেশনা অনুসরণ করতে হবে।"
-                    else
-                        "Start Android's supported setup for a separate Work Profile. Follow the instructions shown by Android.",
+                    if (isProfileOwner) {
+                        if (bn) "CloneX BD এই Work Profile-এর Profile Owner।"
+                        else "CloneX BD is the Profile Owner of this Work Profile."
+                    } else {
+                        if (bn) "CloneX BD Profile Owner নয়। অ্যাপটি Work Profile-এ ইনস্টল আছে, কিন্তু প্রোফাইলের মালিক নয়।"
+                        else "CloneX BD is not the Profile Owner. The app is installed in the Work Profile but does not own it."
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = onSetupWorkProfile,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (bn) "Work Profile তৈরি করুন" else "Set Up Work Profile")
-                }
-                if (workProfileStatus != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        workProfileStatus,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         }
-
         Spacer(Modifier.height(14.dp))
         Text(if (bn) "চেহারা" else "Appearance", fontWeight = FontWeight.SemiBold)
         Row(Modifier.fillMaxWidth().clickable { onDarkChange(!dark) }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
